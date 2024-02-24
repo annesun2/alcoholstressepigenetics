@@ -1,0 +1,46 @@
+library(DESeq2)
+library(ggplot2)
+library(googlesheets4)
+
+#differential gene analysis
+ctsTable <- read.table(file.choose(), sep="\t", header=FALSE, stringsAsFactors=FALSE)
+countDataMatrix <- as.matrix(ctsTable[-1,-1])
+mode(countDataMatrix) <- "integer"
+rownames(countDataMatrix) <- ctsTable[-1,1] 
+colnames(countDataMatrix) <- ctsTable[1,-1]
+colData <- read.delim(file.choose(), sep=",", header=TRUE, stringsAsFactors=TRUE)
+all(colnames(countDataMatrix) == rownames(colData))
+countDataMatrix[is.na(countDataMatrix)] <- 0
+dds <- DESeqDataSetFromMatrix(countData = countDataMatrix, colData = colData, design = ~ alcohol_concentration)
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+levels(dds$alcohol_concentration)
+dds$alcohol_concentration <- relevel(dds$alcohol_concentration, ref = " 0mM Alcohol")
+dds <- DESeq(dds)
+res <- results(dds)
+contrast <- c("treatment", "TGF-beta1", "ethanol and TGF-beta1")
+contrast_result <- results(dds, contrast=contrast)
+contrast_result
+summary(results)
+alpha <- 0.05 
+sig_results <- subset(results, padj < alpha) 
+plotMA(sig_results)
+plotMA(res)
+plotDispEst(dds)
+
+#volcano plot
+plot(res$log2FoldChange, -log10(res$pvalue),
+     xlab = "Log2 Fold Change", ylab = "-log10(p-value)", 
+     main = "Volcano Plot", pch = 19,
+     xlim = c(-2, 2),
+     col = ifelse(res$pvalue < 0.05, "navy", "lightsalmon"))
+
+#upload to google drive
+results_table <- as.data.frame(results(dds, contrast = contrast))
+results_table$gene_names <- rownames(results_table)
+sheet_name <- "research 2.0"
+results_sheet <- gs4_find(sheet_name)
+results_table <- as.data.frame(results_table)
+sheet_write(results_table, results_sheet)
+
+
