@@ -1,0 +1,80 @@
+#differential gene analysis of alcohol dataset
+install.packages("openxlsx")
+library(openxlsx)
+library(DESeq2)
+library(ggplot2)
+file <- file.choose()
+alcctsTable <- read.xlsx(file)
+alccountDataMatrix <- as.matrix(alcctsTable[-1,-1])
+mode(alccountDataMatrix) <- "integer"
+rownames(alccountDataMatrix) <- alcctsTable[-1,1]
+dds <- DESeqDataSetFromMatrix(countData = alccountDataMatrix, colData = colData, design = ~ treatment)
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+dds$treatment <- relevel(dds$treatment, ref = "control")
+dds <- DESeq(dds)
+alcres <- results(dds)
+plotMA(alcres)
+plotDispEsts(dds)
+alccontrast <- c("treatment", "alcohol", "control")
+alccontrast_result <- results(dds, contrast=alccontrast)
+alpha <- 0.05
+sig_results <- subset(alcres, pvalue < alpha)
+
+#differential gene analysis of anxiety dataset
+file2 <- file.choose()
+anxctsTable <- read.xlsx(file2)
+anxcountDataMatrix <- as.matrix(anxctsTable[-1,-1])
+mode(anxcountDataMatrix) <- "integer"
+rownames(anxcountDataMatrix) <- anxctsTable[-1,1]
+anxcolData <- read.delim(file.choose(), sep=",", header=TRUE, stringsAsFactors=TRUE)
+all(colnames(anxcountDataMatrix) == rownames(anxcolData))
+anxcountDataMatrix[is.na(anxcountDataMatrix)] <- 0
+unique_row_names <- make.names(rownames(anxcountDataMatrix), unique = TRUE)
+rownames(anxcountDataMatrix) <- unique_row_names
+all(colnames(anxcountDataMatrix) == rownames(anxcolData))
+anxcountDataMatrix[is.na(anxcountDataMatrix)] <- 0
+anxcountDataMatrix[anxcountDataMatrix < 0] <- 0
+dds2 <- DESeqDataSetFromMatrix(countData = anxcountDataMatrix, colData = anxcolData, design = ~ treatment)
+keep2 <- rowSums(counts(dds2)) >= 10
+dds2 <- dds2[keep2,]
+dds2$treatment <- relevel(dds2$treatment, ref = "control")
+dds2 <- DESeq(dds2)
+anxres <- results(dds2)
+plotMA(anxres)
+plotDispEsts(dds2)
+anxsig_results <- subset(anxres, pvalue < alpha)
+anxcontrast <- c("treatment", "stress", "control")
+anxcontrast_result <- results(dds2, contrast=anxcontrast)
+
+#volcano plot anxiety
+plot(anxres$log2FoldChange, -log10(anxres$pvalue),
+xlab = "Log2 Fold Change", ylab = "-log10(p-value)",
+main = "Volcano Plot", pch = 19,
+xlim = c(-2, 2),
+col = ifelse(anxres$pvalue < 0.05, "lightsalmon", "navy"))
+
+#volcano plot alcohol
+plot(alcres$log2FoldChange, -log10(alcres$pvalue),
+xlab = "Log2 Fold Change", ylab = "-log10(p-value)",
+main = "Volcano Plot", pch = 19,
+xlim = c(-2, 2),
+col = ifelse(alcres$pvalue < 0.05, "lightsalmon", "navy"))
+
+#uploading results to google sheets
+library(googlesheets4)
+results_table <- anxres
+results_table <- as.data.frame(results(dds2, contrast = anxcontrast))
+results_table$gene_names <- rownames(results_table)
+sheet_name <- "NAc 2.0"
+results_sheet <- gs4_find(sheet_name)
+results_table <- as.data.frame(results_table)
+sheet_write(results_table, results_sheet)
+
+results_table <- alcres
+results_table <- as.data.frame(results(dds, contrast = alccontrast))
+results_table$gene_names <- rownames(results_table)
+sheet_name <- "NAc 2.0"
+results_sheet <- gs4_find(sheet_name)
+results_table <- as.data.frame(results_table)
+sheet_write(results_table, results_sheet)
